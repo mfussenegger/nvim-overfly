@@ -1,0 +1,146 @@
+local api = vim.api
+local M = {}
+
+
+local function move_to_highlight(is_closer)
+  local lsp = vim.lsp
+  local util = vim.lsp.util
+
+  local params = util.make_position_params()
+  local win = api.nvim_get_current_win()
+  local lnum, col = unpack(api.nvim_win_get_cursor(win))
+  lnum = lnum - 1
+  local cursor = {
+    start = { line = lnum, character = col }
+  }
+  local results = lsp.buf_request_sync(0, "textDocument/documentHighlight", params)
+  if not results then
+    return
+  end
+  local closest = nil
+  for _, response in pairs(results) do
+    local result = response.result
+    for _, highlight in pairs(result or {}) do
+      local range = highlight.range
+      local cursor_inside_range = (
+        range.start.line <= lnum
+        and range.start.character < col
+        and range["end"].line >= lnum
+        and range["end"].character > col
+      )
+      if not cursor_inside_range
+        and is_closer(cursor, range)
+        and (closest == nil or is_closer(range, closest)) then
+        closest = range
+      end
+    end
+  end
+  if closest then
+    api.nvim_win_set_cursor(win, { closest.start.line + 1, closest.start.character })
+  end
+end
+
+local function is_before(x, y)
+  if x.start.line < y.start.line then
+    return true
+  elseif x.start.line == y.start.line then
+    return x.start.character < y.start.character
+  else
+    return false
+  end
+end
+
+function M.next_highlight()
+  return move_to_highlight(is_before)
+end
+
+
+function M.prev_highlight()
+  return move_to_highlight(function(x, y) return is_before(y, x) end)
+end
+
+
+local function diagnostic_severity()
+  local num_warnings = 0
+  for _, d in ipairs(vim.diagnostic.get(0)) do
+    if d.severity == vim.diagnostic.severity.ERROR then
+      return vim.diagnostic.severity.ERROR
+    elseif d.severity == vim.diagnostic.severity.WARN then
+      num_warnings = num_warnings + 1
+    end
+  end
+  if num_warnings > 0 then
+    return vim.diagnostic.severity.WARN
+  else
+    return nil
+  end
+end
+
+
+function M.next_diagnostic()
+  vim.diagnostic.goto_next({
+    severity = diagnostic_severity(),
+    float = { border = 'single' }
+  })
+end
+
+
+function M.prev_diagnostic()
+  vim.diagnostic.goto_prev({
+    severity = diagnostic_severity(),
+    float = { border = 'single' }
+  })
+end
+
+
+---@param opts? lsp_tags.opts
+function M.select_methods(opts)
+  local default_opts = {
+    kind = {"Constructor", "Method", "Function"}
+  }
+  opts = vim.tbl_extend("force", default_opts, opts or {})
+  require('qwahl').lsp_tags(opts)
+end
+
+
+---@param opts? lsp_tags.opts
+function M.select_methods_sync(opts)
+  local done = false
+  opts = opts or {}
+  opts.on_done = function()
+    done = true
+  end
+  M.select_methods(opts)
+  vim.wait(1000, function() return done == true end)
+end
+
+
+---@param opts {next: function, prev:function}
+function M.move(opts)
+  print("Move mode: Use ] or [ to move, any other char to abort: ")
+  while true do
+    vim.cmd.normal("zz")
+    vim.cmd.redraw()
+    local ok, keynum = pcall(vim.fn.getchar)
+    if not ok then
+      break
+    end
+    local key = string.char(keynum)
+    local fn
+    if key == "]" then
+      fn = opts.next
+    elseif key == "[" then
+      fn = opts.prev
+    else
+      break
+    end
+    local jump_ok, err = pcall(fn)
+    if not jump_ok then
+      vim.notify(err, vim.log.levels.WARN)
+    end
+  end
+  print("Move mode exited")
+end
+
+
+return M

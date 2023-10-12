@@ -42,8 +42,8 @@ end)
 keymap.set("n", "<leader>]w", function()
   local overfly = require("overfly")
   overfly.move({
-    next = overfly.next_diagnostic(),
-    prev = overfly.prev_diagnostic()
+    next = overfly.next_diagnostic,
+    prev = overfly.prev_diagnostic
   })
 end)
 keymap.set("n", "<leader>]m", function()

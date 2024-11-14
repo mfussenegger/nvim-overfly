@@ -6,22 +6,26 @@ local function move_to_highlight(is_closer)
   local lsp = vim.lsp
   local util = vim.lsp.util
 
-  local params = util.make_position_params()
   local win = api.nvim_get_current_win()
   local lnum, col = unpack(api.nvim_win_get_cursor(win))
   lnum = lnum - 1
   local cursor = {
     start = { line = lnum, character = col }
   }
-  local results = lsp.buf_request_sync(0, "textDocument/documentHighlight", params)
-  if not results then
+  ---@diagnostic disable-next-line: deprecated
+  local get_clients = lsp.get_clients or lsp.get_active_clients
+  local method = "textDocument/documentHighlight"
+  local bufnr = api.nvim_get_current_buf()
+  local clients = get_clients({ bufnr = 0, method = method })
+  if not next(clients) then
     return
   end
+  local remaining = #clients
   local closest = nil
-  for _, response in pairs(results) do
-    local result = response.result
-    for _, highlight in pairs(result or {}) do
-      local range = highlight.range
+  ---@param result lsp.DocumentHighlight[]|nil
+  local function on_result(_, result)
+    for _, hl in ipairs(result or {}) do
+      local range = hl.range
       local cursor_inside_range = (
         range.start.line <= lnum
         and range.start.character < col
@@ -34,7 +38,15 @@ local function move_to_highlight(is_closer)
         closest = range
       end
     end
+    remaining = remaining - 1
   end
+  for _, client in ipairs(clients) do
+    local params = util.make_position_params(win, client.offset_encoding)
+    client.request(method, params, on_result, bufnr)
+  end
+  vim.wait(1000, function()
+    return remaining == 0
+  end)
   if closest then
     api.nvim_win_set_cursor(win, { closest.start.line + 1, closest.start.character })
   end
@@ -78,17 +90,23 @@ end
 
 
 function M.next_diagnostic()
-  vim.diagnostic.goto_next({
+  ---@diagnostic disable-next-line: deprecated
+  local jump = vim.diagnostic.jump or vim.diagnostic.goto_next
+  jump({
     severity = diagnostic_severity(),
-    float = { border = 'single' }
+    float = { border = 'single' },
+    count = 1,
   })
 end
 
 
 function M.prev_diagnostic()
-  vim.diagnostic.goto_prev({
+  ---@diagnostic disable-next-line: deprecated
+  local jump = vim.diagnostic.jump or vim.diagnostic.goto_prev
+  jump({
     severity = diagnostic_severity(),
-    float = { border = 'single' }
+    float = { border = 'single' },
+    count = -1,
   })
 end
 

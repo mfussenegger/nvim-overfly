@@ -42,7 +42,12 @@ local function move_to_highlight(is_closer)
   end
   for _, client in ipairs(clients) do
     local params = util.make_position_params(win, client.offset_encoding)
-    client.request(method, params, on_result, bufnr)
+    if vim.fn.has("nvim-0.11") == 1 then
+      client:request(method, params, on_result, bufnr)
+    else
+      ---@diagnostic disable-next-line: param-type-mismatch
+      client.request(method, params, on_result, bufnr)
+    end
   end
   vim.wait(1000, function()
     return remaining == 0
@@ -143,6 +148,7 @@ function M.move(opts)
     if not ok then
       break
     end
+    assert(type(keynum) == "number")
     local key = string.char(keynum)
     local fn
     if key == "]" then

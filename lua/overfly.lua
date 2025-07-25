@@ -68,12 +68,16 @@ local function is_before(x, y)
 end
 
 function M.next_highlight()
-  return move_to_highlight(is_before)
+  for _ = 1, vim.v.count1 do
+    move_to_highlight(is_before)
+  end
 end
 
 
 function M.prev_highlight()
-  return move_to_highlight(function(x, y) return is_before(y, x) end)
+  for _ = 1, vim.v.count1 do
+    move_to_highlight(function(x, y) return is_before(y, x) end)
+  end
 end
 
 
@@ -100,7 +104,7 @@ function M.next_diagnostic()
   jump({
     severity = diagnostic_severity(),
     float = { border = 'single' },
-    count = 1,
+    count = vim.v.count1,
   })
 end
 
@@ -111,7 +115,7 @@ function M.prev_diagnostic()
   jump({
     severity = diagnostic_severity(),
     float = { border = 'single' },
-    count = -1,
+    count = - vim.v.count1,
   })
 end
 
